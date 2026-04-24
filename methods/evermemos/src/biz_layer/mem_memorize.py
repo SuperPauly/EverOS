@@ -1560,7 +1560,7 @@ async def save_memory_docs(
                     await episodic_leann_repo.append_episodic_memory(saved_doc)
                 else:
                     logger.warning(
-                        "[mem_memorize] Skipping LEANN write: vector empty or missing, event_id=%s",
+                        "[mem_memorize] Skipping LEANN write: vector empty or missing for event_id=%s",
                         getattr(saved_doc, "event_id", None),
                     )
             else:

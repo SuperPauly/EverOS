@@ -111,6 +111,14 @@ from infra_layer.adapters.out.search.repository.backend_selector import (
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_KEYWORD_REPO_MAP = {
+    MemoryType.FORESIGHT: ForesightEsRepository,
+    MemoryType.ATOMIC_FACT: AtomicFactEsRepository,
+    MemoryType.EPISODIC_MEMORY: EpisodicMemoryEsRepository,
+    MemoryType.AGENT_CASE: AgentCaseEsRepository,
+    MemoryType.AGENT_SKILL: AgentSkillEsRepository,
+}
+
 
 @dataclass
 class AtomicFactCandidate:
@@ -524,13 +532,9 @@ class MemoryManager:
 
             mem_type = memory_types[0]
 
-            repo_class = get_keyword_repository_class(mem_type) or {
-                MemoryType.FORESIGHT: ForesightEsRepository,
-                MemoryType.ATOMIC_FACT: AtomicFactEsRepository,
-                MemoryType.EPISODIC_MEMORY: EpisodicMemoryEsRepository,
-                MemoryType.AGENT_CASE: AgentCaseEsRepository,
-                MemoryType.AGENT_SKILL: AgentSkillEsRepository,
-            }.get(mem_type)
+            repo_class = get_keyword_repository_class(
+                mem_type
+            ) or DEFAULT_KEYWORD_REPO_MAP.get(mem_type)
             if not repo_class:
                 logger.warning(f"Unsupported memory_type: {mem_type}")
                 return []
