@@ -69,7 +69,13 @@ from infra_layer.adapters.out.search.repository.episodic_memory_milvus_repositor
 from infra_layer.adapters.out.search.repository.episodic_memory_es_repository import (
     EpisodicMemoryEsRepository,
 )
+from infra_layer.adapters.out.search.repository.episodic_memory_leann_repository import (
+    EpisodicMemoryLeannRepository,
+)
 from biz_layer.mem_sync import MemorySyncService
+from infra_layer.adapters.out.search.repository.backend_selector import (
+    leann_backend_enabled,
+)
 
 logger = get_logger(__name__)
 
@@ -86,10 +92,7 @@ class MemoryDocPayload:
     doc: Any
 
 
-from biz_layer.memorize_config import (
-    MemorizeConfig,
-    DEFAULT_MEMORIZE_CONFIG,
-)
+from biz_layer.memorize_config import MemorizeConfig, DEFAULT_MEMORIZE_CONFIG
 
 
 def _is_agent_case_quality_sufficient(
@@ -104,7 +107,6 @@ def _is_agent_case_quality_sufficient(
         )
         return False
     return True
-
 
 
 async def _trigger_clustering(
@@ -176,12 +178,11 @@ async def _trigger_clustering(
 
         # Clustering text: task_intent for agent case, episode for normal
         clustering_text = (
-            agent_case.task_intent if has_case and agent_case.task_intent
+            agent_case.task_intent
+            if has_case and agent_case.task_intent
             else episode_text
         )
-        logger.info(
-            f"[Clustering] ClusterManager created (has_case={has_case})"
-        )
+        logger.info(f"[Clustering] ClusterManager created (has_case={has_case})")
 
         # Convert MemCell to dictionary format required for clustering
         memcell_dict = {
@@ -348,7 +349,11 @@ async def _trigger_clustering(
         #   If you add logic that reads cluster memcells from DB here, you must
         #   consider that new memcells may have been added between Lock 1 release
         #   and Lock 2 acquisition.
-        if cluster_id and agent_case and _is_agent_case_quality_sufficient(agent_case, config):
+        if (
+            cluster_id
+            and agent_case
+            and _is_agent_case_quality_sufficient(agent_case, config)
+        ):
             skill_lock_resource = f"trigger_agent_skill:{group_id}:{cluster_id}"
             async with distributed_lock(
                 resource=skill_lock_resource,
@@ -904,7 +909,11 @@ async def process_memory_extraction(
         )
         # Fire-and-forget: extract and save foresight/atomic_fact in background.
         # Solo scenes only; episode_saved confirms parent_doc is available for linking.
-        if state.is_solo_scene and state.episode_saved and not DEFAULT_MEMORIZE_CONFIG.skip_foresight_and_eventlog:
+        if (
+            state.is_solo_scene
+            and state.episode_saved
+            and not DEFAULT_MEMORIZE_CONFIG.skip_foresight_and_eventlog
+        ):
             asyncio.create_task(
                 _foresight_and_atomic_facts_with_metrics(state, memory_manager)
             )
@@ -1532,28 +1541,48 @@ async def save_memory_docs(
     episodic_docs = grouped_docs.get(MemoryType.EPISODIC_MEMORY, [])
     if episodic_docs:
         episodic_repo = get_bean_by_type(EpisodicMemoryRawRepository)
-        episodic_es_repo = get_bean_by_type(EpisodicMemoryEsRepository)
-        episodic_milvus_repo = get_bean_by_type(EpisodicMemoryMilvusRepository)
+        use_leann = leann_backend_enabled()
+        episodic_es_repo = (
+            get_bean_by_type(EpisodicMemoryEsRepository) if not use_leann else None
+        )
+        episodic_milvus_repo = (
+            get_bean_by_type(EpisodicMemoryMilvusRepository) if not use_leann else None
+        )
+        episodic_leann_repo = (
+            get_bean_by_type(EpisodicMemoryLeannRepository) if use_leann else None
+        )
         saved_episodic: List[Any] = []
 
         for doc in episodic_docs:
             saved_doc = await episodic_repo.append_episodic_memory(doc)
             saved_episodic.append(saved_doc)
 
-            es_doc = EpisodicMemoryConverter.from_mongo(saved_doc)
-            await episodic_es_repo.create(es_doc)
-
-            milvus_entity = EpisodicMemoryMilvusConverter.from_mongo(saved_doc)
-            vector = (
-                milvus_entity.get("vector") if isinstance(milvus_entity, dict) else None
-            )
-            if vector and len(vector) > 0:
-                await episodic_milvus_repo.insert(milvus_entity, flush=False)
+            if use_leann and episodic_leann_repo:
+                vector = list(saved_doc.vector or [])
+                if vector:
+                    await episodic_leann_repo.append_episodic_memory(saved_doc)
+                else:
+                    logger.warning(
+                        "[mem_memorize] Skipping LEANN write: vector empty or missing, event_id=%s",
+                        getattr(saved_doc, "event_id", None),
+                    )
             else:
-                logger.warning(
-                    "[mem_memorize] Skipping write to Milvus: vector empty or missing, event_id=%s",
-                    getattr(saved_doc, "event_id", None),
+                es_doc = EpisodicMemoryConverter.from_mongo(saved_doc)
+                await episodic_es_repo.create(es_doc)
+
+                milvus_entity = EpisodicMemoryMilvusConverter.from_mongo(saved_doc)
+                vector = (
+                    milvus_entity.get("vector")
+                    if isinstance(milvus_entity, dict)
+                    else None
                 )
+                if vector and len(vector) > 0:
+                    await episodic_milvus_repo.insert(milvus_entity, flush=False)
+                else:
+                    logger.warning(
+                        "[mem_memorize] Skipping write to Milvus: vector empty or missing, event_id=%s",
+                        getattr(saved_doc, "event_id", None),
+                    )
 
         saved_result[MemoryType.EPISODIC_MEMORY] = saved_episodic
 
@@ -1566,7 +1595,7 @@ async def save_memory_docs(
 
         sync_service = get_bean_by_type(MemorySyncService)
         await sync_service.sync_batch_foresights(
-            saved_foresight, sync_to_es=True, sync_to_milvus=True
+            saved_foresight, sync_to_es=not leann_backend_enabled(), sync_to_milvus=True
         )
 
     # Atomic Fact
@@ -1578,7 +1607,9 @@ async def save_memory_docs(
 
         sync_service = get_bean_by_type(MemorySyncService)
         await sync_service.sync_batch_atomic_facts(
-            saved_atomic_facts, sync_to_es=True, sync_to_milvus=True
+            saved_atomic_facts,
+            sync_to_es=not leann_backend_enabled(),
+            sync_to_milvus=True,
         )
 
     # Agent Case

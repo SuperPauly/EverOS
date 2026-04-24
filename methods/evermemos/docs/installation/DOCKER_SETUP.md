@@ -4,6 +4,8 @@
 
 This guide provides detailed information about Docker setup and configuration for EverMemOS.
 
+> LEANN note: the optional LEANN backend stores tenant-local index files on disk and reuses EverMemOS precomputed vectors, so the default LEANN setup does not require an additional container.
+
 ---
 
 ## Table of Contents

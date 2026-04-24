@@ -1,0 +1,62 @@
+name: evermemos-leann
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/evermemos-leann.yml"
+      - "methods/evermemos/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/evermemos-leann.yml"
+      - "methods/evermemos/**"
+
+jobs:
+  leann-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: methods/evermemos
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: python -m pip install uv
+
+      - name: Sync dependencies
+        run: python -m uv sync --dev
+
+      - name: Check formatting
+        run: >
+          python -m uv run black --check
+          src/infra_layer/adapters/out/search/leann
+          src/infra_layer/adapters/out/search/repository/leann_base_repository.py
+          src/infra_layer/adapters/out/search/repository/backend_selector.py
+          src/infra_layer/adapters/out/search/repository/episodic_memory_leann_repository.py
+          src/infra_layer/adapters/out/search/repository/atomic_fact_leann_repository.py
+          src/infra_layer/adapters/out/search/repository/foresight_leann_repository.py
+          src/agentic_layer/memory_manager.py
+          src/agentic_layer/search_mem_service.py
+          src/biz_layer/mem_memorize.py
+          src/biz_layer/mem_sync.py
+          src/service/memcell_delete_service.py
+          tests/test_leann_memory_adapter.py
+          tests/integration/test_leann_memory_backend.py
+
+      - name: Run LEANN and regression tests
+        env:
+          PYTHONPATH: src
+        run: >
+          python -m uv run pytest
+          tests/test_leann_memory_adapter.py
+          tests/integration/test_leann_memory_backend.py
+          tests/test_memory_delete.py
+          tests/test_agent_search_service.py
+          tests/test_agent_memory_manager.py
