@@ -104,6 +104,11 @@ from biz_layer.memorize_config import DEFAULT_MEMORIZE_CONFIG
 from core.oxm.constants import MAGIC_ALL
 from biz_layer.retrieve_constants import AGENT_MEMORY_MILVUS_RADIUS
 
+from infra_layer.adapters.out.search.repository.backend_selector import (
+    get_keyword_repository_class,
+    get_vector_repository_class,
+)
+
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -139,10 +144,18 @@ class SearchMemoryService:
     def __init__(self):
         """Initialize search service with repositories."""
         # ES Repositories
-        self.episodic_es_repo = EpisodicMemoryEsRepository()
+        episodic_keyword_repo_class = (
+            get_keyword_repository_class(MemoryType.EPISODIC_MEMORY)
+            or EpisodicMemoryEsRepository
+        )
+        self.episodic_es_repo = episodic_keyword_repo_class()
 
         # Milvus Repositories
-        self.episodic_milvus_repo = EpisodicMemoryMilvusRepository()
+        episodic_vector_repo_class = (
+            get_vector_repository_class(MemoryType.EPISODIC_MEMORY)
+            or EpisodicMemoryMilvusRepository
+        )
+        self.episodic_milvus_repo = episodic_vector_repo_class()
         self.profile_milvus_repo = UserProfileMilvusRepository()
 
         # Agent memory repositories
@@ -1523,7 +1536,7 @@ class SearchMemoryService:
                     query=query,
                     hits=merged_hits,
                     top_k=rerank_top_k,
-                    instruction="Determine whether the skill's methodology and domain are applicable to the query, preferring same-domain skills with directly relevant steps."
+                    instruction="Determine whether the skill's methodology and domain are applicable to the query, preferring same-domain skills with directly relevant steps.",
                 )
                 rerank_ms = (time.perf_counter() - stage_start) * 1000
                 record_retrieve_stage(

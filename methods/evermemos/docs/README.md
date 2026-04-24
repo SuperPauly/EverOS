@@ -49,6 +49,7 @@ Welcome to the EverMemOS documentation! This page serves as a comprehensive inde
 - **[Development Standards](dev_docs/development_standards.md)** - Code standards and conventions
 - **[Bootstrap Usage](dev_docs/bootstrap_usage.md)** - Script runner and bootstrap utilities
 - **[Metrics Library Design](dev_docs/metrics_library_design.md)** - Metrics and monitoring
+- **[LEANN Backend Design](dev_docs/leann_backend_design.md)** - LEANN integration, tenant routing, and update strategy
 
 ## Demos & Evaluation
 

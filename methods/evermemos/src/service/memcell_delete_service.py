@@ -9,6 +9,7 @@ Provides two independent delete methods:
 import asyncio
 from typing import Any, Optional, TypedDict
 
+from core.di import get_bean_by_type
 from core.di.decorators import component
 from core.observation.logger import get_logger
 from core.oxm.constants import MAGIC_ALL
@@ -42,8 +43,20 @@ from infra_layer.adapters.out.search.repository.atomic_fact_es_repository import
 from infra_layer.adapters.out.search.repository.foresight_es_repository import (
     ForesightEsRepository,
 )
+from infra_layer.adapters.out.search.repository.episodic_memory_leann_repository import (
+    EpisodicMemoryLeannRepository,
+)
+from infra_layer.adapters.out.search.repository.atomic_fact_leann_repository import (
+    AtomicFactLeannRepository,
+)
+from infra_layer.adapters.out.search.repository.foresight_leann_repository import (
+    ForesightLeannRepository,
+)
 from infra_layer.adapters.out.persistence.repository.raw_message_repository import (
     RawMessageRepository,
+)
+from infra_layer.adapters.out.search.repository.backend_selector import (
+    leann_backend_enabled,
 )
 
 logger = get_logger(__name__)
@@ -103,6 +116,18 @@ class MemCellDeleteService:
         self.atomic_fact_es_repository = atomic_fact_es_repository
         self.foresight_es_repository = foresight_es_repository
         self.raw_message_repository = raw_message_repository
+        self._leann_enabled = leann_backend_enabled()
+        self.episodic_memory_leann_repository = (
+            get_bean_by_type(EpisodicMemoryLeannRepository)
+            if self._leann_enabled
+            else None
+        )
+        self.atomic_fact_leann_repository = (
+            get_bean_by_type(AtomicFactLeannRepository) if self._leann_enabled else None
+        )
+        self.foresight_leann_repository = (
+            get_bean_by_type(ForesightLeannRepository) if self._leann_enabled else None
+        )
         logger.info("MemCellDeleteService initialized")
 
     # ------------------------------------------------------------------
@@ -242,17 +267,30 @@ class MemCellDeleteService:
 
         # RawMessage and MemCell are source data — not deleted by filters.
         # Milvus/ES only support user_id/group_id (no session_id/sender_id).
-        counts = await self._gather_deletes(
-            # MongoDB (session_id/sender_id narrow scoping)
+        tasks = [
             ("episodes", self.episodic_memory_repository, mongo_kwargs),
             ("atomic_facts", self.atomic_fact_repository, mongo_kwargs),
             ("foresights", self.foresight_repository, mongo_kwargs),
-            # Milvus + ES (user_id/group_id scope only)
-            ("episodes", self.episodic_memory_milvus_repository, scope_kwargs),
-            ("atomic_facts", self.atomic_fact_milvus_repository, scope_kwargs),
-            ("foresights", self.foresight_milvus_repository, scope_kwargs),
-            ("episodes", self.episodic_memory_es_repository, scope_kwargs),
-            ("atomic_facts", self.atomic_fact_es_repository, scope_kwargs),
-            ("foresights", self.foresight_es_repository, scope_kwargs),
-        )
+        ]
+        if self._leann_enabled:
+            tasks.extend(
+                [
+                    ("episodes", self.episodic_memory_leann_repository, scope_kwargs),
+                    ("atomic_facts", self.atomic_fact_leann_repository, scope_kwargs),
+                    ("foresights", self.foresight_leann_repository, scope_kwargs),
+                ]
+            )
+        else:
+            tasks.extend(
+                [
+                    ("episodes", self.episodic_memory_milvus_repository, scope_kwargs),
+                    ("atomic_facts", self.atomic_fact_milvus_repository, scope_kwargs),
+                    ("foresights", self.foresight_milvus_repository, scope_kwargs),
+                    ("episodes", self.episodic_memory_es_repository, scope_kwargs),
+                    ("atomic_facts", self.atomic_fact_es_repository, scope_kwargs),
+                    ("foresights", self.foresight_es_repository, scope_kwargs),
+                ]
+            )
+
+        counts = await self._gather_deletes(*tasks)
         return {"episodes": 0, "atomic_facts": 0, "foresights": 0, **counts}

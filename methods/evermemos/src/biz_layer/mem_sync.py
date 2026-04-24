@@ -37,8 +37,17 @@ from infra_layer.adapters.out.search.repository.foresight_es_repository import (
 from infra_layer.adapters.out.search.repository.atomic_fact_es_repository import (
     AtomicFactEsRepository,
 )
+from infra_layer.adapters.out.search.repository.foresight_leann_repository import (
+    ForesightLeannRepository,
+)
+from infra_layer.adapters.out.search.repository.atomic_fact_leann_repository import (
+    AtomicFactLeannRepository,
+)
 from core.di import get_bean_by_type, service
 from common_utils.datetime_utils import get_now_with_timezone
+from infra_layer.adapters.out.search.repository.backend_selector import (
+    leann_backend_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +82,13 @@ class MemorySyncService:
         )
         self.atomic_fact_es_repo = atomic_fact_es_repo or get_bean_by_type(
             AtomicFactEsRepository
+        )
+        self._leann_enabled = leann_backend_enabled()
+        self.foresight_leann_repo = (
+            get_bean_by_type(ForesightLeannRepository) if self._leann_enabled else None
+        )
+        self.atomic_fact_leann_repo = (
+            get_bean_by_type(AtomicFactLeannRepository) if self._leann_enabled else None
         )
 
         logger.info("MemorySyncService initialization completed")
@@ -119,16 +135,35 @@ class MemorySyncService:
                 )
                 return stats
 
-            # Sync to Milvus
-            if sync_to_milvus:
+            if self._leann_enabled and self.foresight_leann_repo:
+                await self.foresight_leann_repo.create_and_save_foresight_mem(
+                    id=str(foresight.id),
+                    user_id=foresight.user_id,
+                    content=foresight.content,
+                    parent_id=foresight.parent_id,
+                    parent_type=foresight.parent_type,
+                    vector=list(foresight.vector or []),
+                    group_id=foresight.group_id,
+                    event_type=foresight.type,
+                    participants=list(foresight.participants or []),
+                    sender_ids=list(foresight.sender_ids or []),
+                    start_time=self._normalize_datetime(foresight.start_time),
+                    end_time=self._normalize_datetime(foresight.end_time),
+                    duration_days=foresight.duration_days,
+                    evidence=foresight.evidence,
+                    search_content=list(foresight.search_content or []),
+                )
+                stats["foresight"] += 1
+            elif sync_to_milvus:
                 # Use converter to generate Milvus entity
                 milvus_entity = ForesightMilvusConverter.from_mongo(foresight)
                 await self.foresight_milvus_repo.insert(milvus_entity, flush=False)
                 stats["foresight"] += 1
                 logger.debug(f"Foresight synced to Milvus: {foresight.id}")
 
-            # Sync to ES
-            if sync_to_es:
+            if self._leann_enabled:
+                pass
+            elif sync_to_es:
                 # Use converter to generate correct ES document (including jieba tokenized search_content)
                 es_doc = ForesightConverter.from_mongo(foresight)
                 await self.foresight_es_repo.create(es_doc)
@@ -167,16 +202,33 @@ class MemorySyncService:
                 )
                 return stats
 
-            # Sync to Milvus
-            if sync_to_milvus:
+            if self._leann_enabled and self.atomic_fact_leann_repo:
+                await self.atomic_fact_leann_repo.create_and_save_atomic_fact(
+                    id=str(atomic_fact_record.id),
+                    user_id=atomic_fact_record.user_id,
+                    atomic_fact=atomic_fact_record.atomic_fact,
+                    parent_id=atomic_fact_record.parent_id,
+                    parent_type=atomic_fact_record.parent_type,
+                    timestamp=self._normalize_datetime(atomic_fact_record.timestamp)
+                    or get_now_with_timezone(),
+                    vector=list(atomic_fact_record.vector or []),
+                    group_id=atomic_fact_record.group_id,
+                    participants=list(atomic_fact_record.participants or []),
+                    sender_ids=list(atomic_fact_record.sender_ids or []),
+                    event_type=atomic_fact_record.type,
+                    search_content=list(atomic_fact_record.search_content or []),
+                )
+                stats["atomic_fact"] += 1
+            elif sync_to_milvus:
                 # Use converter to generate Milvus entity
                 milvus_entity = AtomicFactMilvusConverter.from_mongo(atomic_fact_record)
                 await self.atomic_fact_milvus_repo.insert(milvus_entity, flush=False)
                 stats["atomic_fact"] += 1
                 logger.debug(f"Atomic fact synced to Milvus: {atomic_fact_record.id}")
 
-            # Sync to ES
-            if sync_to_es:
+            if self._leann_enabled:
+                pass
+            elif sync_to_es:
                 # Use converter to generate correct ES document (including jieba tokenized search_content)
                 es_doc = AtomicFactConverter.from_mongo(atomic_fact_record)
                 await self.atomic_fact_es_repo.create(es_doc)

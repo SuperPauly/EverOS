@@ -40,6 +40,12 @@ from biz_layer.retrieve_constants import (
     DEFAULT_RECALL_MULTIPLIER,
     DEFAULT_TOPK_LIMIT,
 )
+from infra_layer.adapters.out.search.repository.agent_case_es_repository import (
+    AgentCaseEsRepository,
+)
+from infra_layer.adapters.out.search.repository.agent_skill_es_repository import (
+    AgentSkillEsRepository,
+)
 from infra_layer.adapters.out.search.repository.episodic_memory_es_repository import (
     EpisodicMemoryEsRepository,
 )
@@ -48,12 +54,6 @@ from infra_layer.adapters.out.search.repository.foresight_es_repository import (
 )
 from infra_layer.adapters.out.search.repository.atomic_fact_es_repository import (
     AtomicFactEsRepository,
-)
-from infra_layer.adapters.out.search.repository.agent_case_es_repository import (
-    AgentCaseEsRepository,
-)
-from infra_layer.adapters.out.search.repository.agent_skill_es_repository import (
-    AgentSkillEsRepository,
 )
 from core.observation.tracing.decorators import trace_logger
 from core.observation.stage_timer import timed, timed_parallel
@@ -71,6 +71,12 @@ from infra_layer.adapters.out.persistence.document.memory.memcell import DataTyp
 from infra_layer.adapters.out.persistence.document.memory.user_profile import (
     UserProfile,
 )
+from infra_layer.adapters.out.search.repository.agent_case_milvus_repository import (
+    AgentCaseMilvusRepository,
+)
+from infra_layer.adapters.out.search.repository.agent_skill_milvus_repository import (
+    AgentSkillMilvusRepository,
+)
 from infra_layer.adapters.out.search.repository.episodic_memory_milvus_repository import (
     EpisodicMemoryMilvusRepository,
 )
@@ -79,12 +85,6 @@ from infra_layer.adapters.out.search.repository.foresight_milvus_repository impo
 )
 from infra_layer.adapters.out.search.repository.atomic_fact_milvus_repository import (
     AtomicFactMilvusRepository,
-)
-from infra_layer.adapters.out.search.repository.agent_case_milvus_repository import (
-    AgentCaseMilvusRepository,
-)
-from infra_layer.adapters.out.search.repository.agent_skill_milvus_repository import (
-    AgentSkillMilvusRepository,
 )
 from .vectorize_service import get_vectorize_service
 from .rerank_service import get_rerank_service
@@ -104,12 +104,14 @@ from agentic_layer.agentic_utils import (
     check_sufficiency,
     generate_multi_queries,
 )
+from infra_layer.adapters.out.search.repository.backend_selector import (
+    get_keyword_repository_class,
+    get_vector_repository_class,
+)
 
 logger = logging.getLogger(__name__)
 
-
-# MemoryType -> ES Repository mapping
-ES_REPO_MAP = {
+DEFAULT_KEYWORD_REPO_MAP = {
     MemoryType.FORESIGHT: ForesightEsRepository,
     MemoryType.ATOMIC_FACT: AtomicFactEsRepository,
     MemoryType.EPISODIC_MEMORY: EpisodicMemoryEsRepository,
@@ -530,7 +532,9 @@ class MemoryManager:
 
             mem_type = memory_types[0]
 
-            repo_class = ES_REPO_MAP.get(mem_type)
+            repo_class = get_keyword_repository_class(
+                mem_type
+            ) or DEFAULT_KEYWORD_REPO_MAP.get(mem_type)
             if not repo_class:
                 logger.warning(f"Unsupported memory_type: {mem_type}")
                 return []
@@ -674,11 +678,20 @@ class MemoryManager:
             # Select Milvus repository based on memory type
             match mem_type:
                 case MemoryType.FORESIGHT:
-                    milvus_repo = get_bean_by_type(ForesightMilvusRepository)
+                    milvus_repo = get_bean_by_type(
+                        get_vector_repository_class(MemoryType.FORESIGHT)
+                        or ForesightMilvusRepository
+                    )
                 case MemoryType.ATOMIC_FACT:
-                    milvus_repo = get_bean_by_type(AtomicFactMilvusRepository)
+                    milvus_repo = get_bean_by_type(
+                        get_vector_repository_class(MemoryType.ATOMIC_FACT)
+                        or AtomicFactMilvusRepository
+                    )
                 case MemoryType.EPISODIC_MEMORY:
-                    milvus_repo = get_bean_by_type(EpisodicMemoryMilvusRepository)
+                    milvus_repo = get_bean_by_type(
+                        get_vector_repository_class(MemoryType.EPISODIC_MEMORY)
+                        or EpisodicMemoryMilvusRepository
+                    )
                 case MemoryType.AGENT_CASE:
                     milvus_repo = get_bean_by_type(AgentCaseMilvusRepository)
                 case MemoryType.AGENT_SKILL:
@@ -1359,7 +1372,7 @@ class MemoryManager:
                         task_intent=fields.get('task_intent', ''),
                         approach=fields.get('approach', ''),
                         quality_score=fields.get('quality_score'),
-                        key_insight=fields.get('key_insight', '')
+                        key_insight=fields.get('key_insight', ''),
                     )
                 case MemoryType.AGENT_SKILL.value:
                     # AgentSkill doesn't have parent_type/parent_id fields

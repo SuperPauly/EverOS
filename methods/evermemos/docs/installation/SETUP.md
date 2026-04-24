@@ -114,13 +114,14 @@ uv --version
 ### Step 5: Install Project Dependencies
 
 ```bash
-uv sync
+uv sync --dev
 ```
 
 This will:
 - Create a virtual environment
-- Install all required Python packages
+- Install all required Python packages, including the development extras from `--dev`
 - Set up the project for development
+- Install the LEANN backend dependency used by the optional local search path
 
 ---
 
@@ -196,6 +197,18 @@ REDIS_URL=redis://localhost:6379
 ```
 
 For complete configuration options, see the [Configuration Guide](../usage/CONFIGURATION_GUIDE.md).
+
+### Optional: Enable LEANN for local search indexes
+
+LEANN can replace the default Elasticsearch + Milvus search index layer for episodic memories, atomic facts, and foresights.
+
+```bash
+MEMORY_SEARCH_BACKEND=leann
+LEANN_STORAGE_PATH=data/leann_indexes
+LEANN_BACKEND_NAME=hnsw
+```
+
+The current packaged LEANN backend uses EverMemOS precomputed vectors and stores indexes on the local filesystem, so no extra Docker service is required.
 
 ---
 

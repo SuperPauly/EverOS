@@ -64,6 +64,8 @@ Methods are production-ready memory architectures that give agents persistent, s
 
 A self-organizing memory operating system inspired by biological imprinting. Extracts, structures, and retrieves long-term knowledge from conversations — enabling agents to remember, understand, and continuously evolve.
 
+Recent backend additions in `methods/evermemos/` include an optional LEANN-powered local index path for episodic memories, atomic facts, and foresights.
+
 [Paper](https://arxiv.org/abs/2601.02163) · [Docs](methods/evermemos/)
 
 </td>

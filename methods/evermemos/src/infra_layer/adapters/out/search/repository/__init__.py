@@ -10,11 +10,20 @@ from infra_layer.adapters.out.search.repository.episodic_memory_es_repository im
 from infra_layer.adapters.out.search.repository.episodic_memory_milvus_repository import (
     EpisodicMemoryMilvusRepository,
 )
+from infra_layer.adapters.out.search.repository.episodic_memory_leann_repository import (
+    EpisodicMemoryLeannRepository,
+)
 from infra_layer.adapters.out.search.repository.foresight_milvus_repository import (
     ForesightMilvusRepository,
 )
+from infra_layer.adapters.out.search.repository.foresight_leann_repository import (
+    ForesightLeannRepository,
+)
 from infra_layer.adapters.out.search.repository.atomic_fact_milvus_repository import (
     AtomicFactMilvusRepository,
+)
+from infra_layer.adapters.out.search.repository.atomic_fact_leann_repository import (
+    AtomicFactLeannRepository,
 )
 from infra_layer.adapters.out.search.repository.user_profile_milvus_repository import (
     UserProfileMilvusRepository,
@@ -35,8 +44,11 @@ from infra_layer.adapters.out.search.repository.agent_skill_milvus_repository im
 __all__ = [
     "EpisodicMemoryEsRepository",
     "EpisodicMemoryMilvusRepository",
+    "EpisodicMemoryLeannRepository",
     "ForesightMilvusRepository",
+    "ForesightLeannRepository",
     "AtomicFactMilvusRepository",
+    "AtomicFactLeannRepository",
     "UserProfileMilvusRepository",
     "AgentCaseEsRepository",
     "AgentSkillEsRepository",
