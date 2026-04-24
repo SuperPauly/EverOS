@@ -23,7 +23,7 @@ from api_specs.memory_types import (
     AgentCase,
 )
 from api_specs.memory_types import AtomicFact, get_text_from_content_items
-from biz_layer.memorize_config import DEFAULT_MEMORIZE_CONFIG
+from biz_layer.memorize_config import MemorizeConfig, DEFAULT_MEMORIZE_CONFIG
 from core.di import get_bean_by_type
 from infra_layer.adapters.out.persistence.repository.episodic_memory_raw_repository import (
     EpisodicMemoryRawRepository,
@@ -90,9 +90,6 @@ async def _load_llm_custom_setting() -> Optional[Dict[str, Any]]:
 class MemoryDocPayload:
     memory_type: MemoryType
     doc: Any
-
-
-from biz_layer.memorize_config import MemorizeConfig, DEFAULT_MEMORIZE_CONFIG
 
 
 def _is_agent_case_quality_sufficient(

@@ -119,7 +119,7 @@ uv sync --dev
 
 This will:
 - Create a virtual environment
-- Install all required Python packages
+- Install all required Python packages, including the development extras from `--dev`
 - Set up the project for development
 - Install the LEANN backend dependency used by the optional local search path
 

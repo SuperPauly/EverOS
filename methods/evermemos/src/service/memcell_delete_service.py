@@ -9,8 +9,8 @@ Provides two independent delete methods:
 import asyncio
 from typing import Any, Optional, TypedDict
 
-from core.di.decorators import component
 from core.di import get_bean_by_type
+from core.di.decorators import component
 from core.observation.logger import get_logger
 from core.oxm.constants import MAGIC_ALL
 from infra_layer.adapters.out.persistence.repository.memcell_raw_repository import (
